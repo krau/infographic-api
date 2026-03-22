@@ -1,9 +1,14 @@
-FROM node:22-slim AS builder
+FROM node:22-slim
 
 WORKDIR /app
 
-# Install pnpm
-RUN npm install -g pnpm
+# Install pnpm and system dependencies
+RUN npm install -g pnpm && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+    fontconfig \
+    fonts-dejavu-core \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy package files
 COPY package.json pnpm-lock.yaml ./
@@ -16,23 +21,6 @@ COPY . .
 
 # Build the application
 RUN pnpm run build
-
-# Prune dev dependencies for production
-RUN pnpm prune --prod
-
-# Production stage
-FROM node:22-slim AS production
-
-WORKDIR /app
-
-# Copy package files
-COPY package.json pnpm-lock.yaml ./
-
-# Copy production dependencies from builder
-COPY --from=builder /app/node_modules ./node_modules
-
-# Copy built application from builder
-COPY --from=builder /app/dist ./dist
 
 # Create non-root user
 RUN groupadd -r appgroup && useradd -r -g appgroup appuser
