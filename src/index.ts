@@ -5,7 +5,7 @@ import { bearerAuth } from "hono/bearer-auth";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
 import { logger } from "hono/logger";
-import puppeteer from "puppeteer";
+import { chromium, type Browser, type Page } from "playwright";
 
 const app = new Hono();
 
@@ -14,12 +14,12 @@ const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 const HOST = process.env.HOST || "0.0.0.0";
 const AUTH_TOKEN = process.env.AUTH_TOKEN;
 
-// Initialize Puppeteer browser
-let browser: puppeteer.Browser | null = null;
+// Initialize Playwright browser
+let browser: Browser | null = null;
 
-async function getBrowser(): Promise<puppeteer.Browser> {
+async function getBrowser(): Promise<Browser> {
 	if (!browser) {
-		browser = await puppeteer.launch({
+		browser = await chromium.launch({
 			headless: true,
 			args: [
 				"--no-sandbox",
@@ -29,35 +29,22 @@ async function getBrowser(): Promise<puppeteer.Browser> {
 				"--no-first-run",
 				"--no-zygote",
 				"--disable-gpu",
-				"--disable-crashpad",
-				"--disable-breakpad",
-				"--disable-features=Crashpad",
-				"--disable-blink-features=Crashpad",
-				"--disable-background-networking",
-				"--disable-default-apps",
-				"--disable-sync",
-				"--disable-translate",
-				"--hide-scrollbars",
-				"--metrics-recording-only",
-				"--mute-audio",
-				"--no-default-browser-check",
-				"--safebrowsing-disable-auto-update",
 			],
 		});
 	}
 	return browser;
 }
 
-// Render SVG to PNG using Puppeteer
+// Render SVG to PNG using Playwright
 async function renderSVGToPNG(
 	svgString: string,
 	width: number,
 	height: number,
 ): Promise<Buffer> {
-	const page = await (await getBrowser()).newPage();
+	const page: Page = await (await getBrowser()).newPage();
 
 	try {
-		await page.setViewport({ width, height, deviceScaleFactor: 1 });
+		await page.setViewportSize({ width, height });
 
 		// Create HTML with embedded SVG and font styles
 		const html = `
@@ -73,7 +60,7 @@ async function renderSVGToPNG(
 						width: ${width}px;
 						height: ${height}px;
 						background: white;
-						font-family: "Alibaba PuHuiTi", "WenQuanYi Micro Hei", "Noto Sans CJK SC", "Source Han Sans SC", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+						font-family: "Alibaba PuHuiTi", "Source Han Sans SC", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 					}
 					svg {
 						display: block;
@@ -88,19 +75,18 @@ async function renderSVGToPNG(
 			</html>
 		`;
 
-		await page.setContent(html, { waitUntil: "networkidle0" });
+		await page.setContent(html, { waitUntil: "networkidle" });
 
 		// Wait for fonts to load
-		await new Promise((resolve) => setTimeout(resolve, 500));
+		await page.waitForTimeout(500);
 
 		// Take screenshot
 		const screenshot = await page.screenshot({
 			type: "png",
 			omitBackground: false,
-			encoding: "binary",
 		});
 
-		return Buffer.from(screenshot);
+		return screenshot;
 	} finally {
 		await page.close();
 	}
@@ -182,7 +168,7 @@ app.post("/render", async (c) => {
 			});
 		}
 
-		// Render to PNG using Puppeteer
+		// Render to PNG using Playwright
 		const pngBuffer = await renderSVGToPNG(svgString, width, height);
 
 		const duration = Date.now() - startTime;

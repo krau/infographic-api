@@ -10,7 +10,7 @@
     "@antv/infographic": "^0.2.16",
     "@hono/node-server": "^1.19.11",
     "hono": "^4.12.8",
-    "puppeteer": "^24.40.0"
+    "playwright": "^1.58.2"
   },
   "devDependencies": {
     "@types/node": "^20.11.17",
