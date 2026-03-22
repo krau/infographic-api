@@ -5,7 +5,8 @@ WORKDIR /app
 # Install pnpm and system dependencies for Puppeteer
 RUN apt-get update && apt-get install -y \
     fontconfig \
-    fonts-dejavu-core \
+    fonts-wqy-microhei \
+    fonts-wqy-zenhei \
     fonts-noto-cjk \
     wget \
     ca-certificates \

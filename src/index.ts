@@ -65,13 +65,15 @@ async function renderSVGToPNG(
 			<html>
 			<head>
 				<meta charset="UTF-8">
+				<link rel="stylesheet" href="https://assets.antv.antgroup.com/AlibabaPuHuiTi-Regular/result.css">
+				<link rel="stylesheet" href="https://assets.antv.antgroup.com/AlibabaPuHuiTi-Bold/result.css">
 				<style>
 					* { margin: 0; padding: 0; box-sizing: border-box; }
 					body {
 						width: ${width}px;
 						height: ${height}px;
 						background: white;
-						font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+						font-family: "Alibaba PuHuiTi", "WenQuanYi Micro Hei", "Noto Sans CJK SC", "Source Han Sans SC", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 					}
 					svg {
 						display: block;
