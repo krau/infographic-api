@@ -5,7 +5,12 @@ import { bearerAuth } from "hono/bearer-auth";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
 import { logger } from "hono/logger";
-import { type Browser, chromium, type Page } from "playwright";
+import {
+	type Browser,
+	type BrowserContext,
+	chromium,
+	type Page,
+} from "playwright";
 
 const app = new Hono();
 
@@ -16,6 +21,18 @@ const AUTH_TOKEN = process.env.AUTH_TOKEN;
 
 // Initialize Playwright browser
 let browser: Browser | null = null;
+let context: BrowserContext | null = null;
+const PAGE_POOL_SIZE = process.env.PAGE_POOL_SIZE
+	? Math.max(1, parseInt(process.env.PAGE_POOL_SIZE, 10))
+	: 2;
+
+type PageSlot = {
+	page: Page;
+	inUse: boolean;
+};
+
+const pagePool: PageSlot[] = [];
+const pageWaiters: Array<() => void> = [];
 
 async function getBrowser(): Promise<Browser> {
 	if (!browser) {
@@ -31,8 +48,35 @@ async function getBrowser(): Promise<Browser> {
 				"--disable-gpu",
 			],
 		});
+		context = await browser.newContext();
+		for (let i = 0; i < PAGE_POOL_SIZE; i += 1) {
+			const page = await context.newPage();
+			pagePool.push({ page, inUse: false });
+		}
+		console.log(`Playwright page pool initialized: ${PAGE_POOL_SIZE}`);
 	}
 	return browser;
+}
+
+async function acquirePageSlot(): Promise<PageSlot> {
+	for (const slot of pagePool) {
+		if (!slot.inUse) {
+			slot.inUse = true;
+			return slot;
+		}
+	}
+
+	await new Promise<void>((resolve) => {
+		pageWaiters.push(resolve);
+	});
+
+	return acquirePageSlot();
+}
+
+function releasePageSlot(slot: PageSlot): void {
+	slot.inUse = false;
+	const waiter = pageWaiters.shift();
+	if (waiter) waiter();
 }
 
 // Render SVG to PNG using Playwright with @antv/infographic exportToPNGString
@@ -42,9 +86,12 @@ async function renderSVGToPNG(
 	height: number,
 	dpr = 2,
 ): Promise<Buffer> {
-	const page: Page = await (await getBrowser()).newPage();
+	await getBrowser();
+	const slot = await acquirePageSlot();
+	const page = slot.page;
 
 	try {
+		await page.goto("about:blank");
 		await page.setViewportSize({ width, height });
 
 		// Create HTML with embedded SVG and font styles
@@ -53,15 +100,13 @@ async function renderSVGToPNG(
 			<html>
 			<head>
 				<meta charset="UTF-8">
-				<link rel="stylesheet" href="https://assets.antv.antgroup.com/AlibabaPuHuiTi-Regular/result.css">
-				<link rel="stylesheet" href="https://assets.antv.antgroup.com/AlibabaPuHuiTi-Bold/result.css">
 				<style>
 					* { margin: 0; padding: 0; box-sizing: border-box; }
 					body {
 						width: ${width}px;
 						height: ${height}px;
 						background: white;
-						font-family: "Alibaba PuHuiTi", "Source Han Sans SC", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+						font-family: "WenQuanYi Micro Hei", "Noto Sans CJK SC", "Microsoft YaHei", "PingFang SC", "Source Han Sans SC", sans-serif;
 					}
 					svg {
 						display: block;
@@ -76,10 +121,14 @@ async function renderSVGToPNG(
 			</html>
 		`;
 
-		await page.setContent(html, { waitUntil: "networkidle" });
-
-		// Wait for fonts to load
-		await page.waitForTimeout(500);
+		await page.setContent(html, { waitUntil: "domcontentloaded" });
+		await page
+			.evaluate(async () => {
+				if (document.fonts?.ready) {
+					await document.fonts.ready;
+				}
+			})
+			.catch(() => undefined);
 
 		// Use Canvas API in browser context to convert SVG to PNG
 		const pngBase64 = await page.evaluate(
@@ -138,7 +187,7 @@ async function renderSVGToPNG(
 
 		return Buffer.from(pngBase64, "base64");
 	} finally {
-		await page.close();
+		releasePageSlot(slot);
 	}
 }
 
@@ -204,6 +253,10 @@ app.post("/render", async (c) => {
 			width,
 			height,
 		});
+		const sanitizedSvgString = svgString.replace(
+			/<\?xml-stylesheet[^>]*\?>\s*/g,
+			"",
+		);
 
 		// If SVG format requested, return directly
 		if (format === "svg") {
@@ -212,14 +265,19 @@ app.post("/render", async (c) => {
 				`[${new Date().toISOString()}] Rendered SVG in ${duration}ms (${width}x${height})`,
 			);
 
-			return c.body(svgString, 200, {
+			return c.body(sanitizedSvgString, 200, {
 				"Content-Type": "image/svg+xml",
 				"X-Render-Time": `${duration}ms`,
 			});
 		}
 
 		// Render to PNG using Playwright with @antv/infographic exportToPNGString
-		const pngBuffer = await renderSVGToPNG(svgString, width, height, dpr);
+		const pngBuffer = await renderSVGToPNG(
+			sanitizedSvgString,
+			width,
+			height,
+			dpr,
+		);
 
 		const duration = Date.now() - startTime;
 		console.log(
@@ -281,6 +339,9 @@ app.onError((err, c) => {
 
 // Cleanup browser on exit
 process.on("SIGINT", async () => {
+	for (const slot of pagePool) {
+		await slot.page.close().catch(() => undefined);
+	}
 	if (browser) {
 		await browser.close();
 	}
@@ -288,6 +349,9 @@ process.on("SIGINT", async () => {
 });
 
 process.on("SIGTERM", async () => {
+	for (const slot of pagePool) {
+		await slot.page.close().catch(() => undefined);
+	}
 	if (browser) {
 		await browser.close();
 	}
