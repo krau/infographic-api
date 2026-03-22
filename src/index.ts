@@ -1,11 +1,11 @@
 import { renderToString } from "@antv/infographic/ssr";
 import { serve } from "@hono/node-server";
-import { Resvg } from "@resvg/resvg-js";
 import { Hono } from "hono";
 import { bearerAuth } from "hono/bearer-auth";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
 import { logger } from "hono/logger";
+import puppeteer from "puppeteer";
 
 const app = new Hono();
 
@@ -13,6 +13,84 @@ const app = new Hono();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 const HOST = process.env.HOST || "0.0.0.0";
 const AUTH_TOKEN = process.env.AUTH_TOKEN;
+
+// Initialize Puppeteer browser
+let browser: puppeteer.Browser | null = null;
+
+async function getBrowser(): Promise<puppeteer.Browser> {
+	if (!browser) {
+		browser = await puppeteer.launch({
+			headless: true,
+			args: [
+				"--no-sandbox",
+				"--disable-setuid-sandbox",
+				"--disable-dev-shm-usage",
+				"--disable-accelerated-2d-canvas",
+				"--no-first-run",
+				"--no-zygote",
+				"--single-process",
+				"--disable-gpu",
+			],
+		});
+	}
+	return browser;
+}
+
+// Render SVG to PNG using Puppeteer
+async function renderSVGToPNG(
+	svgString: string,
+	width: number,
+	height: number,
+): Promise<Buffer> {
+	const page = await (await getBrowser()).newPage();
+
+	try {
+		await page.setViewport({ width, height, deviceScaleFactor: 1 });
+
+		// Create HTML with embedded SVG and font styles
+		const html = `
+			<!DOCTYPE html>
+			<html>
+			<head>
+				<meta charset="UTF-8">
+				<style>
+					* { margin: 0; padding: 0; box-sizing: border-box; }
+					body {
+						width: ${width}px;
+						height: ${height}px;
+						background: white;
+						font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+					}
+					svg {
+						display: block;
+						width: 100%;
+						height: 100%;
+					}
+				</style>
+			</head>
+			<body>
+				${svgString}
+			</body>
+			</html>
+		`;
+
+		await page.setContent(html, { waitUntil: "networkidle0" });
+
+		// Wait for fonts to load
+		await new Promise((resolve) => setTimeout(resolve, 500));
+
+		// Take screenshot
+		const screenshot = await page.screenshot({
+			type: "png",
+			omitBackground: false,
+			encoding: "binary",
+		});
+
+		return Buffer.from(screenshot);
+	} finally {
+		await page.close();
+	}
+}
 
 // Middleware: CORS
 app.use(cors());
@@ -56,7 +134,7 @@ app.post("/render", async (c) => {
 
 	try {
 		const body = await c.req.json();
-		const { data, width = 800, height = 600, format = "png", dpr = 2 } = body;
+		const { data, width = 800, height = 600, format = "png" } = body;
 
 		if (!data) {
 			return c.json({ error: "Missing required field: data" }, 400);
@@ -90,24 +168,15 @@ app.post("/render", async (c) => {
 			});
 		}
 
-		// Convert SVG to PNG using resvg
-		const resvg = new Resvg(svgString, {
-			fitTo: {
-				mode: "width",
-				value: width * dpr,
-			},
-		});
-
-		const pngData = resvg.render();
-		const pngBuffer = pngData.asPng();
+		// Render to PNG using Puppeteer
+		const pngBuffer = await renderSVGToPNG(svgString, width, height);
 
 		const duration = Date.now() - startTime;
 		console.log(
-			`[${new Date().toISOString()}] Rendered PNG in ${duration}ms (${width * dpr}x${resvg.height}, DPR: ${dpr})`,
+			`[${new Date().toISOString()}] Rendered PNG in ${duration}ms (${width}x${height})`,
 		);
 
-		// Return image using Response with proper typing
-		return new Response(pngBuffer as unknown as BodyInit, {
+		return new Response(new Uint8Array(pngBuffer), {
 			status: 200,
 			headers: {
 				"Content-Type": "image/png",
@@ -146,7 +215,6 @@ app.notFound((c) => {
 
 // Error handler
 app.onError((err, c) => {
-	// Handle HTTPException (e.g., from bearerAuth) - return its response directly
 	if (err instanceof HTTPException) {
 		return err.getResponse();
 	}
@@ -161,19 +229,42 @@ app.onError((err, c) => {
 	);
 });
 
-serve(
-	{
-		fetch: app.fetch,
-		port: PORT,
-		hostname: HOST,
-	},
-	(info) => {
-		console.log(`Server is running on http://${HOST}:${info.port}`);
-		console.log(`Authentication: ${AUTH_TOKEN ? "Enabled" : "Disabled"}`);
-		if (AUTH_TOKEN) {
-			console.log(
-				`Add Authorization: Bearer <token> header to /render requests`,
-			);
-		}
-	},
-);
+// Cleanup browser on exit
+process.on("SIGINT", async () => {
+	if (browser) {
+		await browser.close();
+	}
+	process.exit(0);
+});
+
+process.on("SIGTERM", async () => {
+	if (browser) {
+		await browser.close();
+	}
+	process.exit(0);
+});
+
+// Initialize browser and start server
+getBrowser()
+	.then(() => {
+		serve(
+			{
+				fetch: app.fetch,
+				port: PORT,
+				hostname: HOST,
+			},
+			(info) => {
+				console.log(`Server is running on http://${HOST}:${info.port}`);
+				console.log(`Authentication: ${AUTH_TOKEN ? "Enabled" : "Disabled"}`);
+				if (AUTH_TOKEN) {
+					console.log(
+						`Add Authorization: Bearer <token> header to /render requests`,
+					);
+				}
+			},
+		);
+	})
+	.catch((err) => {
+		console.error("Failed to initialize browser:", err);
+		process.exit(1);
+	});

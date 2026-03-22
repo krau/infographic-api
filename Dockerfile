@@ -2,19 +2,60 @@ FROM node:22-slim
 
 WORKDIR /app
 
-# Install pnpm and system dependencies
-RUN npm install -g pnpm && \
-    apt-get update && \
-    apt-get install -y --no-install-recommends \
+# Install pnpm and system dependencies for Puppeteer
+RUN apt-get update && apt-get install -y \
     fontconfig \
     fonts-dejavu-core \
+    fonts-noto-cjk \
+    wget \
+    ca-certificates \
+    fonts-liberation \
+    libappindicator3-1 \
+    libasound2 \
+    libatk-bridge2.0-0 \
+    libatk1.0-0 \
+    libc6 \
+    libcairo2 \
+    libcups2 \
+    libdbus-1-3 \
+    libexpat1 \
+    libfontconfig1 \
+    libgbm1 \
+    libgcc1 \
+    libglib2.0-0 \
+    libgtk-3-0 \
+    libnspr4 \
+    libnss3 \
+    libpango-1.0-0 \
+    libpangocairo-1.0-0 \
+    libstdc++6 \
+    libx11-6 \
+    libx11-xcb1 \
+    libxcb1 \
+    libxcomposite1 \
+    libxcursor1 \
+    libxdamage1 \
+    libxext6 \
+    libxfixes3 \
+    libxi6 \
+    libxrandr2 \
+    libxrender1 \
+    libxss1 \
+    libxtst6 \
+    lsb-release \
+    xdg-utils \
+    --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
+
+# Install pnpm
+RUN npm install -g pnpm
 
 # Copy package files
 COPY package.json pnpm-lock.yaml ./
 
-# Install dependencies
-RUN pnpm install --frozen-lockfile
+# Install dependencies and Puppeteer browser
+RUN pnpm install --frozen-lockfile && \
+    pnpm exec puppeteer browsers install chrome
 
 # Copy source code
 COPY . .

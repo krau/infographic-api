@@ -9,9 +9,8 @@
   "dependencies": {
     "@antv/infographic": "^0.2.16",
     "@hono/node-server": "^1.19.11",
-    "@resvg/resvg-js": "^2.6.2",
     "hono": "^4.12.8",
-    "skia-canvas": "^3.0.8"
+    "puppeteer": "^24.40.0"
   },
   "devDependencies": {
     "@types/node": "^20.11.17",
