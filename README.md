@@ -34,47 +34,12 @@ pnpm start
 
 ## API 端点
 
-### POST /render
+### GET /
 
-将信息图语法渲染为图片。
-
-#### 请求参数
-
-```json
-{
-  "syntax": "infographic list-row-simple-horizontal-arrow\ndata\n  title Product Development\n  lists\n    - label Step 1\n    - label Step 2",
-  "width": 800,
-  "height": 600,
-  "format": "png",
-  "dpr": 2
-}
-```
-
-| 参数 | 类型 | 必填 | 默认值 | 说明 |
-|------|------|------|--------|------|
-| syntax | string | 是 | - | 信息图语法 |
-| width | number | 否 | 800 | 图片宽度 |
-| height | number | 否 | 600 | 图片高度 |
-| format | string | 否 | "png" | 输出格式: "png" 或 "svg" |
-| dpr | number | 否 | 2 | 设备像素比 (仅 PNG) |
-
-#### 响应
-
-- **SVG 格式**: 返回 `image/svg+xml` 类型的 SVG 字符串
-- **PNG 格式**: 返回 `image/png` 类型的 PNG 图片
-
-#### 示例
+获取 API 信息。
 
 ```bash
-curl -X POST http://localhost:3000/render \
-  -H "Content-Type: application/json" \
-  -d '{
-    "syntax": "infographic list-row-simple-horizontal-arrow\ndata\n  title Product Development Process\n  lists\n    - label Research\n      desc Market analysis\n    - label Design\n      desc Wireframes",
-    "width": 800,
-    "height": 600,
-    "format": "png"
-  }' \
-  --output output.png
+curl http://localhost:3000/
 ```
 
 ### GET /health
@@ -87,7 +52,74 @@ curl http://localhost:3000/health
 
 响应:
 ```json
-{ "status": "ok" }
+{ 
+  "status": "ok",
+  "timestamp": "2026-03-22T03:00:00.000Z"
+}
+```
+
+### POST /render
+
+将信息图语法渲染为图片。
+
+#### 请求头
+
+| 头 | 必填 | 说明 |
+|----|------|------|
+| Content-Type | 是 | `application/json` |
+| Authorization | 条件 | `Bearer <token>` (当设置了 AUTH_TOKEN 时必填) |
+
+#### 请求参数
+
+```json
+{
+  "data": "infographic list-row-simple-horizontal-arrow\ndata\n  title Product Development\n  lists\n    - label Step 1\n    - label Step 2",
+  "width": 800,
+  "height": 600,
+  "format": "png",
+  "dpr": 2
+}
+```
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| data | string | 是 | - | 信息图数据 |
+| width | number | 否 | 800 | 图片宽度 |
+| height | number | 否 | 600 | 图片高度 |
+| format | string | 否 | "png" | 输出格式: "png" 或 "svg" |
+| dpr | number | 否 | 2 | 设备像素比 (仅 PNG) |
+
+#### 响应
+
+- **SVG 格式**: 返回 `image/svg+xml` 类型的 SVG 字符串，响应头包含 `X-Render-Time`
+- **PNG 格式**: 返回 `image/png` 类型的 PNG 图片，响应头包含 `X-Render-Time`
+
+#### 示例
+
+**不启用认证:**
+
+```bash
+curl -X POST http://localhost:3000/render \
+  -H "Content-Type: application/json" \
+  -d '{
+    "data": "infographic list-row-simple-horizontal-arrow\ndata\n  title Product Development Process\n  lists\n    - label Research\n      desc Market analysis\n    - label Design\n      desc Wireframes",
+    "width": 800,
+    "height": 600,
+    "format": "png"
+  }' \
+  --output output.png
+```
+
+**启用认证:**
+
+```bash
+curl -X POST http://localhost:3000/render \
+  -H "Authorization: Bearer your-secret-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "data": "infographic list-row-simple-horizontal-arrow\ndata\n  title Test",
+    "format": "svg"
+  }'
 ```
 
 ## 信息图语法
@@ -112,6 +144,25 @@ data
 | 变量名 | 说明 | 默认值 |
 |--------|------|--------|
 | PORT | 服务器端口 | 3000 |
+| HOST | 服务器监听地址 | 0.0.0.0 |
+| AUTH_TOKEN | Bearer Token (设置后启用认证) | - |
+
+### 配置示例
+
+**本地开发 (只允许本地访问):**
+```bash
+HOST=127.0.0.1 PORT=3000 pnpm start
+```
+
+**启用认证:**
+```bash
+AUTH_TOKEN=mysecrettoken PORT=3000 pnpm start
+```
+
+**生产环境配置:**
+```bash
+HOST=0.0.0.0 PORT=8080 AUTH_TOKEN=your-secure-token pnpm start
+```
 
 ## 技术栈
 
