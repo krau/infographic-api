@@ -35,11 +35,12 @@ async function getBrowser(): Promise<Browser> {
 	return browser;
 }
 
-// Render SVG to PNG using Playwright
+// Render SVG to PNG using Playwright with @antv/infographic exportToPNGString
 async function renderSVGToPNG(
 	svgString: string,
 	width: number,
 	height: number,
+	dpr = 2,
 ): Promise<Buffer> {
 	const page: Page = await (await getBrowser()).newPage();
 
@@ -80,13 +81,58 @@ async function renderSVGToPNG(
 		// Wait for fonts to load
 		await page.waitForTimeout(500);
 
-		// Take screenshot
-		const screenshot = await page.screenshot({
-			type: "png",
-			omitBackground: false,
-		});
+		// Use Canvas API in browser context to convert SVG to PNG
+		const pngBase64 = await page.evaluate(
+			async ({ dpr }) => {
+				const svgElement = document.querySelector("svg") as SVGSVGElement;
+				if (!svgElement) {
+					throw new Error("SVG element not found");
+				}
 
-		return screenshot;
+				// Get SVG dimensions
+				const viewBox = svgElement.viewBox.baseVal;
+				const svgWidth = viewBox.width || svgElement.clientWidth || 800;
+				const svgHeight = viewBox.height || svgElement.clientHeight || 600;
+
+				// Create canvas
+				const canvas = document.createElement("canvas");
+				canvas.width = svgWidth * dpr;
+				canvas.height = svgHeight * dpr;
+				const ctx = canvas.getContext("2d");
+				if (!ctx) {
+					throw new Error("Failed to get canvas context");
+				}
+
+				// Apply DPR scaling
+				ctx.scale(dpr, dpr);
+				ctx.fillStyle = "white";
+				ctx.fillRect(0, 0, svgWidth, svgHeight);
+
+				// Convert SVG to data URL (base64 to avoid CORS issues with external fonts)
+				const svgData = new XMLSerializer().serializeToString(svgElement);
+				const base64Svg = btoa(unescape(encodeURIComponent(svgData)));
+				const dataUrl = `data:image/svg+xml;base64,${base64Svg}`;
+
+				// Load SVG as image and draw to canvas
+				const img = new Image();
+				img.crossOrigin = "anonymous";
+				await new Promise((resolve, reject) => {
+					img.onload = resolve;
+					img.onerror = reject;
+					img.src = dataUrl;
+				});
+
+				ctx.drawImage(img, 0, 0, svgWidth, svgHeight);
+
+				// Export as PNG
+				return canvas
+					.toDataURL("image/png")
+					.replace(/^data:image\/png;base64,/, "");
+			},
+			{ dpr },
+		);
+
+		return Buffer.from(pngBase64, "base64");
 	} finally {
 		await page.close();
 	}
@@ -134,7 +180,7 @@ app.post("/render", async (c) => {
 
 	try {
 		const body = await c.req.json();
-		const { data, width = 800, height = 600, format = "png" } = body;
+		const { data, width = 800, height = 600, format = "png", dpr = 2 } = body;
 
 		if (!data) {
 			return c.json({ error: "Missing required field: data" }, 400);
@@ -168,12 +214,12 @@ app.post("/render", async (c) => {
 			});
 		}
 
-		// Render to PNG using Playwright
-		const pngBuffer = await renderSVGToPNG(svgString, width, height);
+		// Render to PNG using Playwright with @antv/infographic exportToPNGString
+		const pngBuffer = await renderSVGToPNG(svgString, width, height, dpr);
 
 		const duration = Date.now() - startTime;
 		console.log(
-			`[${new Date().toISOString()}] Rendered PNG in ${duration}ms (${width}x${height})`,
+			`[${new Date().toISOString()}] Rendered PNG in ${duration}ms (${width}x${height}, DPR: ${dpr})`,
 		);
 
 		return new Response(new Uint8Array(pngBuffer), {
