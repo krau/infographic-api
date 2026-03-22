@@ -50,28 +50,18 @@ RUN apt-get update && apt-get install -y \
 # Install pnpm
 RUN npm install -g pnpm
 
-# Create non-root user early
-RUN groupadd -r appgroup && useradd -r -g appgroup appuser
-
-# Set Puppeteer cache directory for appuser
-ENV PUPPETEER_CACHE_DIR=/app/.cache/puppeteer
-
 # Copy package files
 COPY package.json pnpm-lock.yaml ./
 
 # Install dependencies and Puppeteer browser
 RUN pnpm install --frozen-lockfile && \
-    pnpm exec puppeteer browsers install chrome && \
-    chown -R appuser:appgroup /app
+    pnpm exec puppeteer browsers install chrome
 
 # Copy source code
-COPY --chown=appuser:appgroup . .
+COPY . .
 
 # Build the application
 RUN pnpm run build
-
-# Switch to non-root user
-USER appuser
 
 # Expose port
 EXPOSE 3000
@@ -80,5 +70,5 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
-# Start the application
+# Start the application (using root user)
 CMD ["node", "dist/index.js"]
