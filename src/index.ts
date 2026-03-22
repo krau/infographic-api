@@ -83,21 +83,19 @@ async function renderSVGToPNG(
 
 		// Use Canvas API in browser context to convert SVG to PNG
 		const pngBase64 = await page.evaluate(
-			async ({ dpr }) => {
+			async ({ dpr, targetWidth, targetHeight }) => {
 				const svgElement = document.querySelector("svg") as SVGSVGElement;
 				if (!svgElement) {
 					throw new Error("SVG element not found");
 				}
 
-				// Get SVG dimensions
-				const viewBox = svgElement.viewBox.baseVal;
-				const svgWidth = viewBox.width || svgElement.clientWidth || 800;
-				const svgHeight = viewBox.height || svgElement.clientHeight || 600;
+				const exportWidth = Number(targetWidth) || 800;
+				const exportHeight = Number(targetHeight) || 600;
 
 				// Create canvas
 				const canvas = document.createElement("canvas");
-				canvas.width = svgWidth * dpr;
-				canvas.height = svgHeight * dpr;
+				canvas.width = exportWidth * dpr;
+				canvas.height = exportHeight * dpr;
 				const ctx = canvas.getContext("2d");
 				if (!ctx) {
 					throw new Error("Failed to get canvas context");
@@ -106,7 +104,13 @@ async function renderSVGToPNG(
 				// Apply DPR scaling
 				ctx.scale(dpr, dpr);
 				ctx.fillStyle = "white";
-				ctx.fillRect(0, 0, svgWidth, svgHeight);
+				ctx.fillRect(0, 0, exportWidth, exportHeight);
+
+				// Force exported SVG size to requested dimensions
+				svgElement.setAttribute("width", String(exportWidth));
+				svgElement.setAttribute("height", String(exportHeight));
+				svgElement.style.width = `${exportWidth}px`;
+				svgElement.style.height = `${exportHeight}px`;
 
 				// Convert SVG to data URL (base64 to avoid CORS issues with external fonts)
 				const svgData = new XMLSerializer().serializeToString(svgElement);
@@ -122,14 +126,14 @@ async function renderSVGToPNG(
 					img.src = dataUrl;
 				});
 
-				ctx.drawImage(img, 0, 0, svgWidth, svgHeight);
+				ctx.drawImage(img, 0, 0, exportWidth, exportHeight);
 
 				// Export as PNG
 				return canvas
 					.toDataURL("image/png")
 					.replace(/^data:image\/png;base64,/, "");
 			},
-			{ dpr },
+			{ dpr, targetWidth: width, targetHeight: height },
 		);
 
 		return Buffer.from(pngBase64, "base64");
