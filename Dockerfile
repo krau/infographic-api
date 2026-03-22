@@ -17,19 +17,19 @@ COPY . .
 # Build the application
 RUN pnpm run build
 
+# Prune dev dependencies for production
+RUN pnpm prune --prod
+
 # Production stage
 FROM node:22-slim AS production
 
 WORKDIR /app
 
-# Install pnpm
-RUN npm install -g pnpm
-
 # Copy package files
 COPY package.json pnpm-lock.yaml ./
 
-# Install production dependencies only
-RUN pnpm install --frozen-lockfile --prod
+# Copy production dependencies from builder
+COPY --from=builder /app/node_modules ./node_modules
 
 # Copy built application from builder
 COPY --from=builder /app/dist ./dist
