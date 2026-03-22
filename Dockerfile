@@ -50,22 +50,27 @@ RUN apt-get update && apt-get install -y \
 # Install pnpm
 RUN npm install -g pnpm
 
+# Create non-root user early
+RUN groupadd -r appgroup && useradd -r -g appgroup appuser
+
+# Set Puppeteer cache directory for appuser
+ENV PUPPETEER_CACHE_DIR=/app/.cache/puppeteer
+
 # Copy package files
 COPY package.json pnpm-lock.yaml ./
 
 # Install dependencies and Puppeteer browser
 RUN pnpm install --frozen-lockfile && \
-    pnpm exec puppeteer browsers install chrome
+    pnpm exec puppeteer browsers install chrome && \
+    chown -R appuser:appgroup /app
 
 # Copy source code
-COPY . .
+COPY --chown=appuser:appgroup . .
 
 # Build the application
 RUN pnpm run build
 
-# Create non-root user
-RUN groupadd -r appgroup && useradd -r -g appgroup appuser
-RUN chown -R appuser:appgroup /app
+# Switch to non-root user
 USER appuser
 
 # Expose port
