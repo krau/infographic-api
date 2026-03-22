@@ -4,9 +4,6 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-overrides:
-  '@antv/layout': ^2.0.0
-
 importers:
 
   .:
@@ -14,9 +11,6 @@ importers:
       '@antv/infographic':
         specifier: ^0.2.16
         version: 0.2.16
-      '@antv/layout':
-        specifier: ^2.0.0
-        version: 2.0.0
       '@hono/node-server':
         specifier: ^1.19.11
         version: 1.19.11(hono@4.12.8)
