@@ -1,0 +1,13 @@
+diff --git a/esm/ssr/renderer.js b/esm/ssr/renderer.js
+index 385c146e0728374a42df027814081cfe723a7f74..e80c92e021c19307bca7f492ca5389a5f84618ab 100644
+--- a/esm/ssr/renderer.js
++++ b/esm/ssr/renderer.js
+@@ -34,7 +34,7 @@ export function renderToString(options, init) {
+             const timeoutPromise = new Promise((_, reject) => {
+                 timeoutId = setTimeout(() => {
+                     reject(new Error('SSR render timeout'));
+-                }, 10000);
++                }, 60000);
+             });
+             infographic.render(options);
+             const svg = yield Promise.race([renderPromise, timeoutPromise]);

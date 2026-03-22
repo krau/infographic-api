@@ -4,13 +4,18 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  '@antv/infographic@0.2.16':
+    hash: 3d6d204961c8484661bcf113affaa84b970b74c786a4cd95de18b16cc480a5ac
+    path: patches/@antv__infographic@0.2.16.patch
+
 importers:
 
   .:
     dependencies:
       '@antv/infographic':
         specifier: ^0.2.16
-        version: 0.2.16(canvas@3.2.2)
+        version: 0.2.16(patch_hash=3d6d204961c8484661bcf113affaa84b970b74c786a4cd95de18b16cc480a5ac)(canvas@3.2.2)
       '@hono/node-server':
         specifier: ^1.19.11
         version: 1.19.11(hono@4.12.8)
@@ -712,7 +717,7 @@ snapshots:
 
   '@antv/hierarchy@0.7.1': {}
 
-  '@antv/infographic@0.2.16(canvas@3.2.2)':
+  '@antv/infographic@0.2.16(patch_hash=3d6d204961c8484661bcf113affaa84b970b74c786a4cd95de18b16cc480a5ac)(canvas@3.2.2)':
     dependencies:
       '@antv/hierarchy': 0.7.1
       '@antv/layout': 2.0.0
